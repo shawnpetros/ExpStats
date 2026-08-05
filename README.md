@@ -1,4 +1,4 @@
-# ExpStats 0.4.2
+# ExpStats 0.5.2
 
 A small Ashita v4 companion overlay for an existing EXP bar. It displays:
 
@@ -6,9 +6,12 @@ A small Ashita v4 companion overlay for an existing EXP bar. It displays:
 - EXP from the last kill
 - Rolling average of the last three EXP gains
 - Rolling average of the last ten EXP gains, shown after Avg(3)
+- EXP remaining to the next level (`TNL`)
+- Estimated time to level at the current session EXP/hour (`ETA`)
 
 After 20 minutes without an EXP gain, the next gain automatically starts a fresh session.
 EXP/hour remains `--` until the second gain, avoiding a meaningless first-kill spike.
+ETA is rounded up and shown as minutes below one hour, then hours and minutes (for example, `42m` or `1h 18m`). It remains `--` until a meaningful EXP/hour rate exists.
 
 ## HorizonXI policy status
 
@@ -16,7 +19,7 @@ EXP/hour remains `--` until the second gain, avoiding a meaningless first-kill s
 
 Policy: https://horizonxi.com/addons
 
-This addon reads incoming `0x02D` action-message packets using the same local-player and field layout as XIUI's approved EXP bar. It recognizes normal EXP and EXP-chain message IDs. It does not enumerate entities, inspect targets, write memory, send packets, access the network, or automate actions.
+This addon reads incoming `0x02D` action-message packets using the same local-player and field layout as XIUI's approved EXP bar. It recognizes normal EXP and EXP-chain message IDs, and reads the client's current/needed EXP values through Ashita's player memory API. It does not enumerate entities, inspect targets, write memory, send packets, access the network, or automate actions.
 
 ## Install after approval
 

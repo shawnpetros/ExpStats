@@ -1,7 +1,7 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.4.2';
-addon.desc      = 'Displays session EXP/hour, last EXP gain, and rolling three- and ten-kill averages.';
+addon.version   = '0.5.2';
+addon.desc      = 'Displays EXP pace, recent gains, EXP to next level, and estimated time to level.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
 require 'common';
@@ -54,6 +54,12 @@ local function add_exp(amount)
     return false;
 end
 
+local function get_exp_remaining()
+    local player = AshitaCore:GetMemoryManager():GetPlayer();
+    if player == nil then return nil; end
+    return core.exp_to_next_level(player:GetExpCurrent(), player:GetExpNeeded());
+end
+
 ashita.events.register('packet_in', 'expstats_packet_in', function (e)
     if e.id ~= 0x02D then return; end
     local entity = GetPlayerEntity();
@@ -90,9 +96,13 @@ ashita.events.register('command', 'expstats_command', function (e)
         for value = 100, 190, 10 do add_exp(value); end
         print(chat.header(addon.name):append(chat.message('Loaded ten test values: 100 through 190.')));
     elseif command == 'status' then
+        local remaining = get_exp_remaining();
+        local numeric_rate = core.exp_per_hour(state, now());
+        local eta = core.format_duration(core.minutes_to_goal(remaining, numeric_rate));
         print(chat.header(addon.name):append(chat.message(string.format(
-            'Total %s | %s/hr | Last %s | Avg(3) %s | Avg(10) %s',
-            core.format_number(state.total), core.format_number(core.exp_per_hour(state, now())),
+            'Total %s | %s/hr | TNL %s | ETA %s | Last %s | Avg(3) %s | Avg(10) %s',
+            core.format_number(state.total), core.format_number(numeric_rate),
+            remaining ~= nil and core.format_number(remaining) or '--', eta,
             core.format_number(state.last), core.format_number(core.average_recent(state, 3)),
             core.format_number(core.average_recent(state, 10))))));
     else
@@ -121,6 +131,14 @@ ashita.events.register('d3d_present', 'expstats_present', function ()
         local last = state.kills > 0 and core.format_number(state.last) or '--';
         local average3 = state.kills > 0 and core.format_number(core.average_recent(state, 3)) or '--';
         local average10 = state.kills > 0 and core.format_number(core.average_recent(state, 10)) or '--';
+        local remaining = get_exp_remaining();
+        local numeric_rate = core.exp_per_hour(state, now());
+        local tnl = remaining ~= nil and core.format_number(remaining) or '--';
+        local eta = state.kills >= 2 and core.format_duration(core.minutes_to_goal(remaining, numeric_rate)) or '--';
+
+        imgui.TextColored({ 0.95, 0.68, 1.00, 1.00 }, 'TNL: ' .. tnl);
+        imgui.SameLine();
+        imgui.TextColored({ 1.00, 0.82, 0.48, 1.00 }, '  ETA: ' .. eta);
 
         imgui.TextColored({ 1.00, 0.78, 0.18, 1.00 }, rate .. ' EXP/hr');
         imgui.SameLine();

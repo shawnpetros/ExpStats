@@ -98,6 +98,29 @@ function M.exp_per_hour(state, now)
     return state.total * 3600 / elapsed
 end
 
+function M.exp_to_next_level(current_exp, needed_exp)
+    if type(current_exp) ~= 'number' or type(needed_exp) ~= 'number' then return nil end
+    if needed_exp <= 0 or current_exp < 0 or current_exp >= needed_exp then return 0 end
+    return needed_exp - current_exp
+end
+
+function M.minutes_to_goal(remaining_exp, exp_per_hour)
+    if type(remaining_exp) ~= 'number' or type(exp_per_hour) ~= 'number' then return nil end
+    if remaining_exp <= 0 then return 0 end
+    if exp_per_hour <= 0 then return nil end
+    return remaining_exp * 60 / exp_per_hour
+end
+
+function M.format_duration(minutes)
+    if type(minutes) ~= 'number' then return '--' end
+    local total_minutes = math.max(0, math.ceil(minutes))
+    if total_minutes < 60 then return tostring(total_minutes) .. 'm' end
+    local hours = math.floor(total_minutes / 60)
+    local remainder = total_minutes % 60
+    if remainder == 0 then return tostring(hours) .. 'h' end
+    return string.format('%dh %dm', hours, remainder)
+end
+
 function M.format_number(value)
     local n = math.floor((value or 0) + 0.5)
     local formatted = tostring(n)

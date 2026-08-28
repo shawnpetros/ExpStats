@@ -56,7 +56,19 @@ function M.new_state(now)
         last = 0,
         recent = {},
         kills = 0,
+        band_active = false,
+        band_exp = 0,
     }
+end
+
+function M.set_band_active(state, active)
+    active = active == true
+    if active and not state.band_active then
+        state.band_exp = 0
+    elseif not active then
+        state.band_exp = 0
+    end
+    state.band_active = active
 end
 
 function M.add_exp(state, amount, now, idle_reset_seconds)
@@ -75,6 +87,7 @@ function M.add_exp(state, amount, now, idle_reset_seconds)
     if state.started_at == nil then state.started_at = now end
     state.last_gain_at = now
     state.total = state.total + amount
+    if state.band_active then state.band_exp = state.band_exp + amount end
     state.last = amount
     state.kills = state.kills + 1
     table.insert(state.recent, amount)
@@ -129,6 +142,21 @@ function M.format_number(value)
         formatted, changed = formatted:gsub('^(-?%d+)(%d%d%d)', '%1,%2')
     until changed == 0
     return formatted
+end
+
+function M.party_report(state, now, remaining_exp)
+    local rate = M.exp_per_hour(state, now)
+    local rate_text = state.kills >= 2 and M.format_number(rate) or '--'
+    local remaining_text = remaining_exp ~= nil and M.format_number(remaining_exp) or '--'
+    local eta_text = state.kills >= 2
+        and M.format_duration(M.minutes_to_goal(remaining_exp, rate)) or '--'
+    local last_text = state.kills > 0 and M.format_number(state.last) or '--'
+    local average3_text = state.kills > 0 and M.format_number(M.average_recent(state, 3)) or '--'
+
+    return string.format(
+        'EXP: %s total | %s/hr | TNL %s | ETA %s | Last %s | Avg3 %s',
+        M.format_number(state.total), rate_text, remaining_text, eta_text,
+        last_text, average3_text)
 end
 
 return M

@@ -1,7 +1,7 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.5.2';
-addon.desc      = 'Displays EXP pace, recent gains, EXP to next level, and estimated time to level.';
+addon.version   = '0.7.0';
+addon.desc      = 'Displays EXP pace, recent gains, time to level, and EXP earned while Dedication is active.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
 require 'common';
@@ -44,7 +44,7 @@ end
 
 local function print_help()
     print(chat.header(addon.name):append(chat.message('Commands:')));
-    print(chat.message('/expstats show|hide|move|reset|test|status'));
+    print(chat.message('/expstats show|hide|move|reset|test|status|partyreport'));
 end
 
 local function add_exp(amount)
@@ -52,6 +52,26 @@ local function add_exp(amount)
         return true;
     end
     return false;
+end
+
+local function dedication_active()
+    local player = AshitaCore:GetMemoryManager():GetPlayer();
+    if player == nil then return nil; end
+    local buffs = player:GetBuffs();
+    if type(buffs) ~= 'table' then return nil; end
+
+    for _, buff in pairs(buffs) do
+        local name = AshitaCore:GetResourceManager():GetString('buffs.names', buff);
+        if type(name) == 'string' and name:lower() == 'dedication' then
+            return true;
+        end
+    end
+    return false;
+end
+
+local function update_band_state()
+    local active = dedication_active();
+    if active ~= nil then core.set_band_active(state, active); end
 end
 
 local function get_exp_remaining()
@@ -65,7 +85,10 @@ ashita.events.register('packet_in', 'expstats_packet_in', function (e)
     local entity = GetPlayerEntity();
     if entity == nil then return; end
     local amount = core.parse_action_exp(e.data_modified, entity.ServerId);
-    if amount ~= nil then add_exp(amount); end
+    if amount ~= nil then
+        update_band_state();
+        add_exp(amount);
+    end
 end);
 
 ashita.events.register('command', 'expstats_command', function (e)
@@ -95,6 +118,9 @@ ashita.events.register('command', 'expstats_command', function (e)
         reset_session();
         for value = 100, 190, 10 do add_exp(value); end
         print(chat.header(addon.name):append(chat.message('Loaded ten test values: 100 through 190.')));
+    elseif command == 'partyreport' or command == 'party' then
+        local report = core.party_report(state, now(), get_exp_remaining());
+        AshitaCore:GetChatManager():QueueCommand(-1, '/p ' .. report);
     elseif command == 'status' then
         local remaining = get_exp_remaining();
         local numeric_rate = core.exp_per_hour(state, now());
@@ -112,6 +138,8 @@ end);
 
 ashita.events.register('d3d_present', 'expstats_present', function ()
     if not config.visible then return; end
+
+    update_band_state();
 
     if first_position then
         -- Always apply the persisted coordinates on the first rendered frame.
@@ -139,6 +167,11 @@ ashita.events.register('d3d_present', 'expstats_present', function ()
         imgui.TextColored({ 0.95, 0.68, 1.00, 1.00 }, 'TNL: ' .. tnl);
         imgui.SameLine();
         imgui.TextColored({ 1.00, 0.82, 0.48, 1.00 }, '  ETA: ' .. eta);
+        if state.band_active then
+            imgui.SameLine();
+            imgui.TextColored({ 0.45, 0.90, 1.00, 1.00 },
+                '  Band: ' .. core.format_number(state.band_exp) .. ' EXP');
+        end
 
         imgui.TextColored({ 1.00, 0.78, 0.18, 1.00 }, rate .. ' EXP/hr');
         imgui.SameLine();

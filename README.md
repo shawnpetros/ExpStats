@@ -1,4 +1,4 @@
-# ExpStats 0.7.0
+# ExpStats 0.7.2
 
 A small Ashita v4 companion overlay for an existing EXP bar. It displays:
 
@@ -41,6 +41,8 @@ Extract `ExpStats/` into Ashita's `addons/` directory, then run:
 Settings persist per Ashita's stock settings library. Session EXP does not persist across addon/game restarts.
 
 Window coordinates are saved when `/expstats move` is used to lock the window and restored on the first rendered frame after a reload or restart.
+
+ExpStats respects both Ashita's global custom-UI visibility and FFXI's native ScrollLock interface toggle. Pressing ScrollLock temporarily hides or restores ExpStats without changing its saved `/expstats show|hide` setting. Reload ExpStats while the native interface is visible so its initial toggle state is synchronized.
 
 ## Review scope
 

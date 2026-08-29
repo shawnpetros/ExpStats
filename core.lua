@@ -15,6 +15,19 @@ function M.parse_exp(message)
     return amount and tonumber(amount) or nil
 end
 
+-- Windows key events encode the previous key state in lParam bit 30 and the
+-- transition state in bit 31. Match only the first key-down transition so a
+-- held key cannot toggle an overlay repeatedly through auto-repeat.
+function M.is_initial_keydown(wparam, lparam, virtual_key)
+    if type(wparam) ~= 'number' or type(lparam) ~= 'number'
+        or type(virtual_key) ~= 'number' or wparam ~= virtual_key then
+        return false
+    end
+    local was_down = bit.band(lparam, bit.lshift(1, 30)) ~= 0
+    local is_up = bit.band(lparam, bit.lshift(1, 31)) ~= 0
+    return not was_down and not is_up
+end
+
 local function u16le(data, index)
     local a, b = data:byte(index, index + 1)
     if a == nil or b == nil then return nil end

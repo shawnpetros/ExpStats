@@ -1,6 +1,6 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.7.0';
+addon.version   = '0.7.2';
 addon.desc      = 'Displays EXP pace, recent gains, time to level, and EXP earned while Dedication is active.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
@@ -24,6 +24,7 @@ local first_position = true;
 local window_x = config.x;
 local window_y = config.y;
 local state = core.new_state(ashita.time.clock().ms / 1000);
+local native_ui_hidden = false;
 
 settings.register('settings', 'settings_update', function (s)
     if s ~= nil then
@@ -35,6 +36,17 @@ end);
 
 local function now()
     return ashita.time.clock().ms / 1000;
+end
+
+-- Respect Ashita's global custom-UI visibility. The stock hideui addon
+-- toggles this manager (commonly through a ScrollLock bind); ExpStats keeps
+-- its own persistent visibility setting separate from that temporary state.
+local function ashita_ui_visible()
+    local ok, visible = pcall(function ()
+        local manager = AshitaCore:GetGuiManager();
+        return manager == nil or manager:GetVisible();
+    end);
+    return not ok or visible ~= false;
 end
 
 local function reset_session()
@@ -91,6 +103,16 @@ ashita.events.register('packet_in', 'expstats_packet_in', function (e)
     end
 end);
 
+-- FFXI handles ScrollLock as its own native interface toggle; it does not
+-- appear in Ashita's /bind list and does not change GuiManager visibility.
+-- Observe the unblocked WNDPROC key transition and mirror that temporary
+-- state without changing ExpStats' saved visibility.
+ashita.events.register('key', 'expstats_key', function (e)
+    if core.is_initial_keydown(e.wparam, e.lparam, 0x91) then
+        native_ui_hidden = not native_ui_hidden;
+    end
+end);
+
 ashita.events.register('command', 'expstats_command', function (e)
     local args = e.command:args();
     if #args == 0 or not args[1]:any('/expstats', '/xs') then return; end
@@ -137,7 +159,7 @@ ashita.events.register('command', 'expstats_command', function (e)
 end);
 
 ashita.events.register('d3d_present', 'expstats_present', function ()
-    if not config.visible then return; end
+    if not config.visible or native_ui_hidden or not ashita_ui_visible() then return; end
 
     update_band_state();
 

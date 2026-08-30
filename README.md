@@ -1,4 +1,4 @@
-# ExpStats 0.7.2
+# ExpStats 0.7.3
 
 A small Ashita v4 companion overlay for an existing EXP bar. It displays:
 
@@ -14,6 +14,8 @@ After 20 minutes without an EXP gain, the next gain automatically starts a fresh
 EXP/hour remains `--` until the second gain, avoiding a meaningless first-kill spike.
 ETA is rounded up and shown as minutes below one hour, then hours and minutes (for example, `42m` or `1h 18m`). It remains `--` until a meaningful EXP/hour rate exists.
 The Band counter appears only while the client reports the `Dedication` status effect. It starts at zero when the effect is detected, counts awarded EXP while active, and disappears when the effect wears. It intentionally reports total EXP earned rather than claiming an exact bonus remainder: multiple bands share the same status effect but have different bonus percentages and caps, which the client buff list does not identify.
+
+Dedication detection uses canonical status ID `249` and supports the indexed buff collection returned by Horizon's Ashita build; it does not depend on a resource-name lookup.
 
 ## HorizonXI policy status
 

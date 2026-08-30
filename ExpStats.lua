@@ -1,6 +1,6 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.7.2';
+addon.version   = '0.7.3';
 addon.desc      = 'Displays EXP pace, recent gains, time to level, and EXP earned while Dedication is active.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
@@ -70,15 +70,12 @@ local function dedication_active()
     local player = AshitaCore:GetMemoryManager():GetPlayer();
     if player == nil then return nil; end
     local buffs = player:GetBuffs();
-    if type(buffs) ~= 'table' then return nil; end
+    if buffs == nil then return nil; end
 
-    for _, buff in pairs(buffs) do
-        local name = AshitaCore:GetResourceManager():GetString('buffs.names', buff);
-        if type(name) == 'string' and name:lower() == 'dedication' then
-            return true;
-        end
-    end
-    return false;
+    -- Dedication is status ID 249. Ashita builds expose the buff collection
+    -- with differing Lua shapes, so inspect both common index bases rather
+    -- than requiring type(table) or relying on a resource-string namespace.
+    return core.has_indexed_value(buffs, 249, 0, 32);
 end
 
 local function update_band_state()

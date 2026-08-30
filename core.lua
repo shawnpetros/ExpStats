@@ -1,5 +1,19 @@
 local M = {}
 
+function M.has_indexed_value(values, desired, first_index, last_index)
+    if values == nil then return nil end
+    local readable = false
+    for index = first_index or 0, last_index or 32 do
+        local ok, value = pcall(function () return values[index] end)
+        if ok and value ~= nil then
+            readable = true
+            if value == desired then return true end
+        end
+    end
+    if readable then return false end
+    return nil
+end
+
 function M.clean_message(message)
     local text = tostring(message or '')
     text = text:gsub('[\30\31].', '')

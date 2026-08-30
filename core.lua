@@ -14,6 +14,12 @@ function M.has_indexed_value(values, desired, first_index, last_index)
     return nil
 end
 
+function M.band_bonus_from_awarded(awarded_exp, bonus_rate)
+    if type(awarded_exp) ~= 'number' or awarded_exp <= 0 then return 0 end
+    if type(bonus_rate) ~= 'number' or bonus_rate <= 0 then return 0 end
+    return awarded_exp * bonus_rate / (1 + bonus_rate)
+end
+
 function M.clean_message(message)
     local text = tostring(message or '')
     text = text:gsub('[\30\31].', '')

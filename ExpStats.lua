@@ -1,6 +1,6 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.7.3';
+addon.version   = '0.8.0';
 addon.desc      = 'Displays EXP pace, recent gains, time to level, and EXP earned while Dedication is active.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
@@ -16,6 +16,14 @@ local defaults = T{
     x = 420,
     y = 180,
     opacity = 0.72,
+    band_profile = 'emperor',
+};
+
+local BAND_PROFILES = T{
+    empress     = T{ label = 'Empress', rate = 0.50, cap = 1000 },
+    emperor     = T{ label = 'Emperor', rate = 0.75, cap = 2250 },
+    chariot     = T{ label = 'Chariot', rate = 1.00, cap = 4000 },
+    anniversary = T{ label = 'Anniversary', rate = 1.00, cap = 3000 },
 };
 
 local config = settings.load(defaults);
@@ -57,6 +65,11 @@ end
 local function print_help()
     print(chat.header(addon.name):append(chat.message('Commands:')));
     print(chat.message('/expstats show|hide|move|reset|test|status|partyreport'));
+    print(chat.message('/expstats band emperor|empress|chariot|anniversary'));
+end
+
+local function current_band_profile()
+    return BAND_PROFILES[config.band_profile] or BAND_PROFILES.emperor;
 end
 
 local function add_exp(amount)
@@ -140,6 +153,21 @@ ashita.events.register('command', 'expstats_command', function (e)
     elseif command == 'partyreport' or command == 'party' then
         local report = core.party_report(state, now(), get_exp_remaining());
         AshitaCore:GetChatManager():QueueCommand(-1, '/p ' .. report);
+    elseif command == 'band' then
+        local requested = (#args >= 3) and args[3]:lower() or nil;
+        if requested ~= nil then
+            if BAND_PROFILES[requested] == nil then
+                print(chat.header(addon.name):append(chat.error('Unknown band. Use emperor, empress, chariot, or anniversary.')));
+                return;
+            end
+            config.band_profile = requested;
+            settings.save();
+        end
+        local profile = current_band_profile();
+        local bonus = core.band_bonus_from_awarded(state.band_exp, profile.rate);
+        print(chat.header(addon.name):append(chat.message(string.format(
+            '%s Band selected: +%d%%, %s bonus cap. Current tracked bonus: %s. Counter preserved.',
+            profile.label, math.floor(profile.rate * 100 + 0.5), core.format_number(profile.cap), core.format_number(bonus)))));
     elseif command == 'status' then
         local remaining = get_exp_remaining();
         local numeric_rate = core.exp_per_hour(state, now());
@@ -188,8 +216,11 @@ ashita.events.register('d3d_present', 'expstats_present', function ()
         imgui.TextColored({ 1.00, 0.82, 0.48, 1.00 }, '  ETA: ' .. eta);
         if state.band_active then
             imgui.SameLine();
+            local profile = current_band_profile();
+            local bonus = core.band_bonus_from_awarded(state.band_exp, profile.rate);
             imgui.TextColored({ 0.45, 0.90, 1.00, 1.00 },
-                '  Band: ' .. core.format_number(state.band_exp) .. ' EXP');
+                string.format('  %s: %s / %s bonus', profile.label,
+                    core.format_number(bonus), core.format_number(profile.cap)));
         end
 
         imgui.TextColored({ 1.00, 0.78, 0.18, 1.00 }, rate .. ' EXP/hr');

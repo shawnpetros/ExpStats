@@ -1,6 +1,10 @@
-# ExpStats 0.8.0
+# ExpStats
 
-A small Ashita v4 companion overlay for an existing EXP bar. It displays:
+A small Ashita v4 companion overlay for an existing EXP bar.
+
+![ExpStats in game](image/ExpStats.png)
+
+It displays: It displays:
 
 - Session EXP per hour (timing begins on the first EXP gain)
 - EXP from the last kill

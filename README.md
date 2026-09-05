@@ -23,11 +23,10 @@ Use `/expstats band emperor|empress|chariot|anniversary` to select the active ri
 
 Dedication detection uses canonical status ID `249` and supports the indexed buff collection returned by Horizon's Ashita build; it does not depend on a resource-name lookup.
 
-## HorizonXI policy status
+## HorizonXI 
+This addon has been approved for use on HorizonXI
+<img width="739" height="144" alt="image" src="https://github.com/user-attachments/assets/5c18035e-67de-47f3-b5e8-520fd8a5a1a2" />
 
-**Pending review — do not load on HorizonXI yet.** HorizonXI's live addon policy says unlisted custom addons are prohibited. Custom addons must be publicly hosted and submitted through a Community Team Ticket in Discord `#other-support` for review.
-
-Policy: https://horizonxi.com/addons
 
 This addon reads incoming `0x02D` action-message packets using the same local-player and field layout as XIUI's approved EXP bar. It recognizes normal EXP and EXP-chain message IDs, and reads the client's current/needed EXP values through Ashita's player memory API. On the explicit `/expstats partyreport` command, it queues one ordinary `/p` message containing the current statistics. It does not enumerate entities, inspect targets, write memory, send packets, access the network, or automate gameplay actions.
 

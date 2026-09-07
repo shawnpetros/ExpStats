@@ -62,14 +62,12 @@ end
 
 -- Decode Horizon/Ashita's incoming 0x02D action-message payload. The field
 -- layout mirrors XIUI's approved EXP-bar handler and SimpleLog's message table.
-function M.parse_action_exp(data, player_id)
-    if type(data) ~= 'string' or #data < 26 or type(player_id) ~= 'number' then
+function M.parse_action_exp_event(data)
+    if type(data) ~= 'string' or #data < 26 then
         return nil
     end
 
     local actor_id = u32le(data, 5)
-    if actor_id ~= player_id then return nil end
-
     -- Horizon XIUI's 0x02D handler reads the message value at byte 17
     -- (e.data_modified offset 0x10 + 1), not the retail-style param_1 slot.
     local value = u32le(data, 17)
@@ -77,8 +75,17 @@ function M.parse_action_exp(data, player_id)
     if value == nil or message_id == nil then return nil end
     message_id = message_id % 1024
 
-    if message_id == 8 or message_id == 105 or message_id == 253 then return value end
+    if message_id == 8 or message_id == 105 or message_id == 253 then
+        return actor_id, value
+    end
     return nil
+end
+
+function M.parse_action_exp(data, player_id)
+    if type(player_id) ~= 'number' then return nil end
+    local actor_id, value = M.parse_action_exp_event(data)
+    if actor_id ~= player_id then return nil end
+    return value
 end
 
 function M.new_state(now)

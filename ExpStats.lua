@@ -1,6 +1,6 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.8.1';
+addon.version   = '0.8.2';
 addon.desc      = 'Displays EXP pace, recent gains, time to level, and EXP earned while Dedication is active.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
@@ -37,6 +37,7 @@ local native_ui_hidden = false;
 -- start with the same brief warm-up used for subsequent zone/login packets.
 local transition_until = (ashita.time.clock().ms / 1000) + 2;
 local active_server_id = nil;
+local cached_remaining = nil;
 
 settings.register('settings', 'settings_update', function (s)
     if s ~= nil then
@@ -141,16 +142,17 @@ ashita.events.register('packet_in', 'expstats_packet_in', function (e)
     -- characters. Avoid player-backed native objects while pointers settle.
     if e.id == 0x00A then
         transition_until = now() + 2;
+        cached_remaining = nil;
         first_position = true;
         return;
     end
     if e.id ~= 0x02D then return; end
+    local actor_id, amount = core.parse_action_exp_event(e.data_modified);
+    if amount == nil then return; end
     local snapshot = refresh_player_snapshot();
-    if snapshot == nil then return; end
-    local amount = core.parse_action_exp(e.data_modified, snapshot.server_id);
-    if amount ~= nil then
-        add_exp(amount);
-    end
+    if snapshot == nil or actor_id ~= snapshot.server_id then return; end
+    cached_remaining = snapshot.remaining;
+    add_exp(amount);
 end);
 
 -- FFXI handles ScrollLock as its own native interface toggle; it does not
@@ -191,7 +193,9 @@ ashita.events.register('command', 'expstats_command', function (e)
         for value = 100, 190, 10 do add_exp(value); end
         print(chat.header(addon.name):append(chat.message('Loaded ten test values: 100 through 190.')));
     elseif command == 'partyreport' or command == 'party' then
-        local report = core.party_report(state, now(), get_exp_remaining());
+        local remaining = get_exp_remaining();
+        if remaining ~= nil then cached_remaining = remaining; end
+        local report = core.party_report(state, now(), cached_remaining);
         AshitaCore:GetChatManager():QueueCommand(-1, '/p ' .. report);
     elseif command == 'band' then
         local requested = (#args >= 3) and args[3]:lower() or nil;
@@ -210,6 +214,7 @@ ashita.events.register('command', 'expstats_command', function (e)
             profile.label, math.floor(profile.rate * 100 + 0.5), core.format_number(profile.cap), core.format_number(bonus)))));
     elseif command == 'status' then
         local remaining = get_exp_remaining();
+        if remaining ~= nil then cached_remaining = remaining; end
         local numeric_rate = core.exp_per_hour(state, now());
         local eta = core.format_duration(core.minutes_to_goal(remaining, numeric_rate));
         print(chat.header(addon.name):append(chat.message(string.format(
@@ -225,13 +230,9 @@ end);
 
 ashita.events.register('d3d_present', 'expstats_present', function ()
     if not config.visible or native_ui_hidden or not ashita_ui_visible() then return; end
-    if now() < transition_until then return; end
-
-    -- Resolve all player-backed values before opening an ImGui window. A
-    -- failed transition-time read skips this frame without stranding Begin.
-    local snapshot = refresh_player_snapshot();
-    if snapshot == nil then return; end
-    local remaining = snapshot.remaining;
+    -- Rendering uses only Lua-owned cached values. Never dereference player
+    -- memory from d3d_present, including while leaving a zone before 0x00A.
+    local remaining = cached_remaining;
 
     if first_position then
         -- Always apply the persisted coordinates on the first rendered frame.

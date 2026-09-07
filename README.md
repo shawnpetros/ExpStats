@@ -49,6 +49,8 @@ Settings persist per Ashita's stock settings library. Session EXP does not persi
 
 Window coordinates are saved when `/expstats move` is used to lock the window and restored on the first rendered frame after a reload or restart.
 
+Version 0.8.1 defers player-memory reads briefly after the incoming zone/login packet, performs those reads before opening the ImGui window, and skips transitional frames when a complete player snapshot is unavailable. It also guarantees that a successful `imgui.Begin` is paired with `imgui.End`, even if drawing fails. Per-character files under `config/addons/ExpStats/` are normal Ashita settings-library behavior and are not shared between characters.
+
 ExpStats respects both Ashita's global custom-UI visibility and FFXI's native ScrollLock interface toggle. Pressing ScrollLock temporarily hides or restores ExpStats without changing its saved `/expstats show|hide` setting. Reload ExpStats while the native interface is visible so its initial toggle state is synchronized.
 
 ## Review scope
@@ -56,3 +58,9 @@ ExpStats respects both Ashita's global custom-UI visibility and FFXI's native Sc
 - `ExpStats.lua`: Ashita events, commands, settings, and ImGui overlay
 - `core.lua`: message cleaning/parsing and arithmetic
 - No bundled binaries or network access
+
+## Tests
+
+Run the deterministic transition and ImGui lifecycle regression test with:
+
+    luajit tests/lifecycle.lua

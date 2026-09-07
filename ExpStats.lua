@@ -1,6 +1,6 @@
 addon.name      = 'ExpStats';
 addon.author    = 'troyBORG';
-addon.version   = '0.8.0';
+addon.version   = '0.8.1';
 addon.desc      = 'Displays EXP pace, recent gains, time to level, and EXP earned while Dedication is active.';
 addon.link      = 'Pending HorizonXI Community Team review';
 
@@ -33,6 +33,10 @@ local window_x = config.x;
 local window_y = config.y;
 local state = core.new_state(ashita.time.clock().ms / 1000);
 local native_ui_hidden = false;
+-- Addon reloads can occur after the transition packet has already arrived, so
+-- start with the same brief warm-up used for subsequent zone/login packets.
+local transition_until = (ashita.time.clock().ms / 1000) + 2;
+local active_server_id = nil;
 
 settings.register('settings', 'settings_update', function (s)
     if s ~= nil then
@@ -79,36 +83,72 @@ local function add_exp(amount)
     return false;
 end
 
-local function dedication_active()
-    local player = AshitaCore:GetMemoryManager():GetPlayer();
-    if player == nil then return nil; end
-    local buffs = player:GetBuffs();
-    if buffs == nil then return nil; end
+local function read_player_snapshot()
+    if now() < transition_until then return nil; end
 
-    -- Dedication is status ID 249. Ashita builds expose the buff collection
-    -- with differing Lua shapes, so inspect both common index bases rather
-    -- than requiring type(table) or relying on a resource-string namespace.
-    return core.has_indexed_value(buffs, 249, 0, 32);
+    local ok, snapshot = pcall(function ()
+        local entity = GetPlayerEntity();
+        if entity == nil or type(entity.ServerId) ~= 'number' or entity.ServerId == 0 then
+            return nil;
+        end
+
+        local memory = AshitaCore:GetMemoryManager();
+        if memory == nil then return nil; end
+        local player = memory:GetPlayer();
+        if player == nil then return nil; end
+
+        local current = player:GetExpCurrent();
+        local needed = player:GetExpNeeded();
+        if type(current) ~= 'number' or type(needed) ~= 'number' then return nil; end
+
+        local dedication = nil;
+        local buffs = player:GetBuffs();
+        if buffs ~= nil then
+            dedication = core.has_indexed_value(buffs, 249, 0, 32);
+        end
+
+        return {
+            server_id = entity.ServerId,
+            remaining = core.exp_to_next_level(current, needed),
+            dedication = dedication,
+        };
+    end);
+
+    if not ok then return nil; end
+    return snapshot;
 end
 
-local function update_band_state()
-    local active = dedication_active();
-    if active ~= nil then core.set_band_active(state, active); end
+local function refresh_player_snapshot()
+    local snapshot = read_player_snapshot();
+    if snapshot == nil then return nil; end
+    if active_server_id ~= nil and active_server_id ~= snapshot.server_id then
+        state = core.new_state(now());
+    end
+    active_server_id = snapshot.server_id;
+    if snapshot.dedication ~= nil then
+        core.set_band_active(state, snapshot.dedication);
+    end
+    return snapshot;
 end
 
 local function get_exp_remaining()
-    local player = AshitaCore:GetMemoryManager():GetPlayer();
-    if player == nil then return nil; end
-    return core.exp_to_next_level(player:GetExpCurrent(), player:GetExpNeeded());
+    local snapshot = refresh_player_snapshot();
+    return snapshot ~= nil and snapshot.remaining or nil;
 end
 
 ashita.events.register('packet_in', 'expstats_packet_in', function (e)
+    -- 0x00A arrives while entering the world after zoning or changing
+    -- characters. Avoid player-backed native objects while pointers settle.
+    if e.id == 0x00A then
+        transition_until = now() + 2;
+        first_position = true;
+        return;
+    end
     if e.id ~= 0x02D then return; end
-    local entity = GetPlayerEntity();
-    if entity == nil then return; end
-    local amount = core.parse_action_exp(e.data_modified, entity.ServerId);
+    local snapshot = refresh_player_snapshot();
+    if snapshot == nil then return; end
+    local amount = core.parse_action_exp(e.data_modified, snapshot.server_id);
     if amount ~= nil then
-        update_band_state();
         add_exp(amount);
     end
 end);
@@ -185,8 +225,13 @@ end);
 
 ashita.events.register('d3d_present', 'expstats_present', function ()
     if not config.visible or native_ui_hidden or not ashita_ui_visible() then return; end
+    if now() < transition_until then return; end
 
-    update_band_state();
+    -- Resolve all player-backed values before opening an ImGui window. A
+    -- failed transition-time read skips this frame without stranding Begin.
+    local snapshot = refresh_player_snapshot();
+    if snapshot == nil then return; end
+    local remaining = snapshot.remaining;
 
     if first_position then
         -- Always apply the persisted coordinates on the first rendered frame.
@@ -201,42 +246,50 @@ ashita.events.register('d3d_present', 'expstats_present', function ()
         flags = bit.bor(flags, ImGuiWindowFlags_NoTitleBar, ImGuiWindowFlags_NoInputs);
     end
 
-    if imgui.Begin('EXP Stats###ExpStats', moving, flags) then
-        local rate = state.kills >= 2 and core.format_number(core.exp_per_hour(state, now())) or '--';
-        local last = state.kills > 0 and core.format_number(state.last) or '--';
-        local average3 = state.kills > 0 and core.format_number(core.average_recent(state, 3)) or '--';
-        local average10 = state.kills > 0 and core.format_number(core.average_recent(state, 10)) or '--';
-        local remaining = get_exp_remaining();
-        local numeric_rate = core.exp_per_hour(state, now());
-        local tnl = remaining ~= nil and core.format_number(remaining) or '--';
-        local eta = state.kills >= 2 and core.format_duration(core.minutes_to_goal(remaining, numeric_rate)) or '--';
+    local begin_ok, window_open = pcall(imgui.Begin, 'EXP Stats###ExpStats', moving, flags);
+    if not begin_ok then return; end
 
-        imgui.TextColored({ 0.95, 0.68, 1.00, 1.00 }, 'TNL: ' .. tnl);
-        imgui.SameLine();
-        imgui.TextColored({ 1.00, 0.82, 0.48, 1.00 }, '  ETA: ' .. eta);
-        if state.band_active then
+    local draw_ok, x, y = pcall(function ()
+        if window_open then
+            local rate = state.kills >= 2 and core.format_number(core.exp_per_hour(state, now())) or '--';
+            local last = state.kills > 0 and core.format_number(state.last) or '--';
+            local average3 = state.kills > 0 and core.format_number(core.average_recent(state, 3)) or '--';
+            local average10 = state.kills > 0 and core.format_number(core.average_recent(state, 10)) or '--';
+            local numeric_rate = core.exp_per_hour(state, now());
+            local tnl = remaining ~= nil and core.format_number(remaining) or '--';
+            local eta = state.kills >= 2 and core.format_duration(core.minutes_to_goal(remaining, numeric_rate)) or '--';
+
+            imgui.TextColored({ 0.95, 0.68, 1.00, 1.00 }, 'TNL: ' .. tnl);
             imgui.SameLine();
-            local profile = current_band_profile();
-            local bonus = core.band_bonus_from_awarded(state.band_exp, profile.rate);
-            imgui.TextColored({ 0.45, 0.90, 1.00, 1.00 },
-                string.format('  %s: %s / %s bonus', profile.label,
-                    core.format_number(bonus), core.format_number(profile.cap)));
+            imgui.TextColored({ 1.00, 0.82, 0.48, 1.00 }, '  ETA: ' .. eta);
+            if state.band_active then
+                imgui.SameLine();
+                local profile = current_band_profile();
+                local bonus = core.band_bonus_from_awarded(state.band_exp, profile.rate);
+                imgui.TextColored({ 0.45, 0.90, 1.00, 1.00 },
+                    string.format('  %s: %s / %s bonus', profile.label,
+                        core.format_number(bonus), core.format_number(profile.cap)));
+            end
+
+            imgui.TextColored({ 1.00, 0.78, 0.18, 1.00 }, rate .. ' EXP/hr');
+            imgui.SameLine();
+            imgui.TextColored({ 0.72, 0.82, 1.00, 1.00 }, '  Last: ' .. last);
+            imgui.SameLine();
+            imgui.TextColored({ 0.65, 1.00, 0.72, 1.00 }, '  Avg(3): ' .. average3);
+            imgui.SameLine();
+            imgui.TextColored({ 0.50, 0.92, 0.88, 1.00 }, '  Avg(10): ' .. average10);
+
+            if moving[1] then
+                imgui.TextDisabled('Drag me, then use /expstats move to lock.');
+            end
         end
+        return imgui.GetWindowPos();
+    end);
 
-        imgui.TextColored({ 1.00, 0.78, 0.18, 1.00 }, rate .. ' EXP/hr');
-        imgui.SameLine();
-        imgui.TextColored({ 0.72, 0.82, 1.00, 1.00 }, '  Last: ' .. last);
-        imgui.SameLine();
-        imgui.TextColored({ 0.65, 1.00, 0.72, 1.00 }, '  Avg(3): ' .. average3);
-        imgui.SameLine();
-        imgui.TextColored({ 0.50, 0.92, 0.88, 1.00 }, '  Avg(10): ' .. average10);
+    -- Begin succeeded, so End is mandatory even if drawing raised an error.
+    pcall(imgui.End);
+    if not draw_ok then return; end
 
-        if moving[1] then
-            imgui.TextDisabled('Drag me, then use /expstats move to lock.');
-        end
-    end
-
-    local x, y = imgui.GetWindowPos();
     if x ~= nil and y ~= nil then
         window_x = x;
         window_y = y;
@@ -247,5 +300,4 @@ ashita.events.register('d3d_present', 'expstats_present', function ()
             config.y = math.floor(y);
         end
     end
-    imgui.End();
 end);
